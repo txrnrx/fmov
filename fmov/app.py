@@ -25,10 +25,11 @@ from src.collaborative import CollaborativeFilteringRecommender
 from src.content_based import ContentBasedRecommender
 from src.hybrid import HybridRecommender
 from src.evaluation import RecommenderEvaluator
+from src.smart_chat_ai import SmartChatAI
 
 # Page config
 st.set_page_config(
-    page_title="🎬 FlixMood - AI Content Recommender",
+    page_title="Fmov - AI Content Recommender",
     page_icon="🎬",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -340,7 +341,9 @@ def train_models(_shows_df, _ratings_df):
     hybrid_model = HybridRecommender(cf_weight=0.6, cb_weight=0.4)
     hybrid_model.fit(cf_model, cb_model, _shows_df, _ratings_df)
     
-    return cf_model, cb_model, hybrid_model, cf_metrics
+    chat_ai = SmartChatAI()
+    
+    return cf_model, cb_model, hybrid_model, cf_metrics, chat_ai
 
 
 def get_mood_recommendations(cb_model, shows_df, mood, context, energy, 
@@ -415,60 +418,256 @@ def get_surprise_recommendation(shows_df, content_type="Both"):
     return sample
 
 
+from src.ui_components import load_custom_css, render_navbar, render_hero_section, render_dashboard_card
+
+# ... (Existing imports remain) ...
+
 def main():
-    # Header with premium styling
-    st.markdown('<h1 class="main-header">🎬 FlixMood</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">AI-Powered Content Recommendations • Netflix Style • Personalized For You</p>', unsafe_allow_html=True)
+    # 1. Load Custom CSS (Dark Theme, Netflix Red)
+    load_custom_css()
     
-    # Sidebar with enhanced navigation
-    with st.sidebar:
-        st.markdown("### 🎬 FlixMood")
-        st.markdown("---")
+    # 2. Session State Navigation
+    if "page" not in st.session_state:
+        st.session_state.page = "Home"
         
-        page = st.radio(
-            "📍 Navigate",
-            ["🏠 Smart Recommendations", "📊 Data Insights", "🎯 User Recommendations", 
-             "🔍 Content Explorer", "📈 Model Performance"],
-            label_visibility="collapsed"
-        )
-        
-        st.markdown("---")
-        st.markdown("### ℹ️ About")
-        st.info("""
-        **FlixMood** uses advanced AI:
-        - 🧠 **SVD** Matrix Factorization
-        - 📝 **TF-IDF** Content Analysis
-        - 🔀 **Hybrid** Ensemble Methods
-        - 🎭 **Mood-Aware** Recommendations
-        """)
-        
-        st.markdown("---")
-        st.markdown("### 📊 Quick Stats")
+    # 3. Render Navbar (Replaces Sidebar)
+    # The navbar component returns columns where we place buttons
+    # We use buttons to change session_state.page
+    col1, col2, col3, col4, col5 = render_navbar()
     
-    # Load data
-    with st.spinner("🔄 Loading content library..."):
+    # Navigation Buttons (Visual Link Style)
+    with col2:
+        if st.button("Home", key="nav_home"): st.session_state.page = "Home"
+    with col3:
+        if st.button("TV Shows", key="nav_tv"): st.session_state.page = "Explorer"
+    with col4:
+        if st.button("Movies", key="nav_movies"): st.session_state.page = "Explorer"
+    with col5:
+        # Search Icon Button to toggle Chat Mode
+        if st.button("💬 Chat AI", key="nav_chat"): st.session_state.page = "AI Chat"
+    
+    # Load Data & Models
+    with st.spinner("🔄 Loading fmov library..."):
         shows_df, ratings_df = load_data()
+        cf_model, cb_model, hybrid_model, cf_metrics, chat_ai = train_models(shows_df, ratings_df)
+        
+    # 4. Route Logic based on st.session_state.page
+    page = st.session_state.page
     
-    # Display quick stats in sidebar
-    with st.sidebar:
-        st.metric("Content", f"{len(shows_df):,}")
-        st.metric("Users", f"{ratings_df['user_id'].nunique():,}")
-    
-    # Train models
-    with st.spinner("🧠 Training AI models..."):
-        cf_model, cb_model, hybrid_model, cf_metrics = train_models(shows_df, ratings_df)
-    
-    # Page routing
-    if page == "🏠 Smart Recommendations":
+    # ----- HOME PAGE (DASHBOARD) -----
+    if page == "Home":
+        # A. Hero Section
+        # Pick a random "Featured" item (high rating, recent)
+        recent_items = shows_df[shows_df['release_year'] > 2020]
+        if not recent_items.empty:
+            featured = recent_items.sample(1).iloc[0]
+        else:
+            # Fallback if no recent items found
+            featured = shows_df.sample(1).iloc[0]
+            
+        render_hero_section(featured)
+        
+        st.markdown("### 🎯 Explore fmov")
+        
+        # B. Feature Tiles (Cards)
+        c1, c2, c3, c4 = st.columns(4)
+        
+        with c1:
+            if render_dashboard_card("🤖", "AI Chat", "Talk to our Smart Assistant", "card_chat"):
+                st.session_state.page = "AI Chat"
+                st.rerun()
+                
+        with c2:
+            if render_dashboard_card("🔍", "Content Explorer", "Browse the full catalog", "card_explorer"):
+                st.session_state.page = "Explorer"
+                st.rerun()
+                
+        with c3:
+            if render_dashboard_card("🎯", "For You", "Personalized picks", "card_foryou"):
+                st.session_state.page = "User Recs"
+                st.rerun()
+                
+        with c4:
+            if render_dashboard_card("📊", "Deep Insights", "Analyze trends & data", "card_eda"):
+                st.session_state.page = "Insights"
+                st.rerun()
+        
+        st.markdown("---")
+        
+        # C. Quick Content Rows (Netflix Style Rails)
+        st.subheader("🔥 Trending Now")
+        # Just showing a quick horizontal list of top rated content
+        trending = shows_df.sample(4) # Simulated trending
+        
+        rc1, rc2, rc3, rc4 = st.columns(4)
+        for idx, col in enumerate([rc1, rc2, rc3, rc4]):
+            item = trending.iloc[idx]
+            with col:
+                st.image("https://via.placeholder.com/300x450.png?text=Poster", use_container_width=True)
+                st.caption(f"**{item['title']}** ({item['release_year']})")
+                
+        # Existing Smart Home Logic (Moods) included below or integrated?
+        # Let's keep the Mood Selector as a section on the Home Page
+        st.markdown("---")
         show_smart_home(shows_df, ratings_df, cf_metrics, cb_model)
-    elif page == "📊 Data Insights":
-        show_eda_page(shows_df, ratings_df)
-    elif page == "🎯 User Recommendations":
-        show_recommendations_page(cf_model, cb_model, hybrid_model, shows_df, ratings_df)
-    elif page == "🔍 Content Explorer":
+
+    # ----- OTHER PAGES -----
+    elif page == "AI Chat":
+        show_smart_chat_page(chat_ai, cb_model, hybrid_model, shows_df, ratings_df)
+    
+    elif page == "Explorer":
         show_explorer_page(cb_model, shows_df)
-    elif page == "📈 Model Performance":
-        show_evaluation_page(cf_model, shows_df, ratings_df, cf_metrics)
+        
+    elif page == "User Recs":
+        show_recommendations_page(cf_model, cb_model, hybrid_model, shows_df, ratings_df)
+        
+    elif page == "Insights":
+        show_eda_page(shows_df, ratings_df)
+
+
+def show_smart_chat_page(chat_ai, cb_model, hybrid_model, shows_df, ratings_df):
+    """Smart Chat AI Interface."""
+    st.header("💬 Talk to FlixMood AI")
+    st.caption("Ask me anything! E.g. 'Find Mission Impossible', 'I want something thrilling', 'Movies by Tom Cruise'")
+    
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display chat messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Image Upload for Vision AI
+    with st.expander("📷 Upload Image for Analysis (optional)"):
+        uploaded_file = st.file_uploader("Upload a movie poster or scene...", type=['png', 'jpg', 'jpeg'])
+        
+    # Chat input
+    if prompt := st.chat_input("Ask for a movie or TV show..."):
+        # Display user message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Process with SmartChatAI
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                # Pass both text and image
+                response = chat_ai.process_input(prompt, image_file=uploaded_file)
+                mode = response["mode"]
+                explanation = response["explanation"]
+                query = response["query"]
+                
+                # Show AI Explanation
+                st.markdown(f"**🤖 AI Explanation:** {explanation}")
+                
+                # Execute Logic based on Mode
+                results = pd.DataFrame()
+                
+                if mode == "SEARCH":
+                    # SEARCH MODE: Content-Based Search Only
+                    
+                    # 1. Start with full dataframe
+                    mask = pd.Series([True] * len(shows_df))
+                    
+                    # 2. Filter by Genre if detected
+                    if query["genres"]:
+                        # Create a mask for ANY of the detected genres
+                        genre_mask = pd.Series([False] * len(shows_df))
+                        for g in query["genres"]:
+                            genre_mask |= shows_df['listed_in'].str.contains(g, case=False, na=False)
+                        mask &= genre_mask
+                        
+                    # 3. Filter by Specific Term (Actor or Keywords or Raw Text)
+                    search_term = query["text"] # Default
+                    
+                    if query["actor"]:
+                        search_term = query["actor"]
+                        st.caption(f"Searching for actor: {search_term}")
+                        mask &= (
+                            shows_df['cast'].str.contains(search_term, case=False, na=False) |
+                            shows_df['director'].str.contains(search_term, case=False, na=False)
+                        )
+                    elif query["keywords"]:
+                        # If we have keywords, use them instead of the full messy sentence
+                        # But only if we didn't already filter by genre heavily
+                        pass
+                        
+                    # If we haven't filtered by Actor, and we have a specific text search intent
+                    # (and not just a genre filter), do a broad text search
+                    if not query["actor"]:
+                        # If we have genres, we might not need text search if the user just said "Horror movies"
+                        # But if they said "Horror movies about ghosts", we need "ghosts"
+                        
+                        # Clean the text: remove genre words from search term?
+                        # Using raw text for broad Match can be risky if it contains "I want to watch"
+                        # So we rely on SmartChatAI's 'keywords' if available
+                        if query["keywords"]:
+                            # Construct a regex or search for each keyword
+                            # For simplicity, stick to broad search but maybe cleaner?
+                            pass
+                        
+                        # Apply broad text search if we strictly need to find a TITLE
+                        # But if we already filtered by Genre, relax this?
+                        # Let's keep the broad search but make it optional if we have genres?
+                        # No, "Horror movies" -> Genre=Horror, Keywords=[movies]. Search "movies" -> might match titles?
+                        
+                        # BETTER STRATEGY:
+                        # If Genres are present, and NO keywords (other than stopwords), just return Genre matches.
+                        # If Keywords exist, filter Genre matches by Keywords.
+                        
+                        final_term = search_term
+                        if query["keywords"]:
+                            # Use the first meaningful keyword as search term if available
+                            # This is a heuristic.
+                            # final_term = query["keywords"][0]
+                            pass
+                            
+                        # If we have genres and text is just "Horror", we shouldn't search "Horror" in title.
+                        # We already filtered mask by genre.
+                        
+                        if not query["genres"]:
+                             # Only apply broad search if no genre filter, OR if we want to refine
+                             text_mask = (
+                                shows_df['title'].str.contains(final_term, case=False, na=False) |
+                                shows_df['cast'].str.contains(final_term, case=False, na=False) |
+                                shows_df['listed_in'].str.contains(final_term, case=False, na=False) |
+                                shows_df['director'].str.contains(final_term, case=False, na=False)
+                            )
+                             mask &= text_mask
+                    
+                    results = shows_df[mask].head(10)
+                    
+                elif mode == "RECOMMEND":
+                    # RECOMMEND MODE: Content-Based Candidates -> Hybrid Ranking
+                    # 1. Get Candidates
+                    keywords = query["keywords"] + query["genres"]
+                    if not keywords:
+                        keywords = [query["text"]] # Fallback
+                        
+                    # Use Content-Based to get similar items
+                    # We reuse get_genre_recommendations as a generic keyword search
+                    candidates = cb_model.get_genre_recommendations(keywords, n=20)
+                    
+                    # 2. Rank Candidates (Hybrid)
+                    # For now just showing candidates, assuming cold start if no user context
+                    # To add Hybrid: we need a user_id. Let's assume User 1 for demo or just show candidates.
+                    # Ticket 6 says "Call hybrid model if user context exists".
+                    # We'll just display candidates for now to be safe, or mock User 1.
+                    results = candidates.head(10)
+                    
+                # Display Results
+                if not results.empty:
+                    for _, row in results.iterrows():
+                        render_recommendation_card(row, badge_text=mode.capitalize())
+                elif mode == "NOT_FOUND":
+                    st.warning("I couldn't find anything matching that. Try being more specific!")
+                else:
+                    st.info("No matching results found in the library.")
+
+            # Save assistant response (simplified for history)
+            st.session_state.messages.append({"role": "assistant", "content": explanation})
 
 
 def show_smart_home(shows_df, ratings_df, cf_metrics, cb_model):
@@ -780,39 +979,132 @@ def show_recommendations_page(cf_model, cb_model, hybrid_model, shows_df, rating
 
 
 def show_explorer_page(cb_model, shows_df):
-    """Content exploration and similarity search."""
+    """Unified Content Explorer with Catalog & Similarity Search."""
     st.header("🔍 Content Explorer")
     
-    tab1, tab2 = st.tabs(["🔍 Find Similar", "🎭 Genre Discovery"])
-    
-    with tab1:
-        title_search = st.text_input("🔎 Search for a title:")
+    # --- Input Section ---
+    with st.container():
+        col1, col2 = st.columns([3, 1])
         
-        if title_search:
+        with col1:
+            st.markdown("##### 🔎 Search Library")
+            search_query = st.text_input(
+                "Search by title, actor, director, or genre...",
+                key="unified_search",
+                placeholder="e.g. 'Inception', 'Tom Hanks', 'Sci-Fi'..."
+            )
+        
+        with col2:
+            st.markdown("##### 🎭 Filter by Genre")
+            selected_genres = st.multiselect(
+                "Filter results:",
+                ["Action", "Comedy", "Drama", "Horror", "Sci-Fi", "Romance", 
+                 "Documentary", "Thriller", "Animation", "Family", "Crime"],
+                key="unified_genre_filter",
+                label_visibility="collapsed"
+            )
+
+        # Toggles below input
+        st.markdown("")
+        t_col1, t_col2 = st.columns(2)
+        with t_col1:
+            show_catalog = st.checkbox("📚 Show Catalog Matches", value=True)
+        with t_col2:
+            show_similar = st.checkbox("💡 Show Similar Content", value=True)
+        
+        st.markdown("---")
+
+    # --- Results Logic ---
+    if search_query:
+        # 1. CATALOG SEARCH
+        if show_catalog:
+            st.subheader("📚 Catalog Matches")
+            
+            mask = (
+                shows_df['title'].str.contains(search_query, case=False, na=False) |
+                shows_df['cast'].str.contains(search_query, case=False, na=False) |
+                shows_df['listed_in'].str.contains(search_query, case=False, na=False) |
+                shows_df['director'].str.contains(search_query, case=False, na=False)
+            )
+            cat_results = shows_df[mask]
+            
+            # Apply genre filter if selected
+            if selected_genres:
+                genre_mask = cat_results['listed_in'].apply(
+                    lambda x: any(g in str(x) for g in selected_genres)
+                )
+                cat_results = cat_results[genre_mask]
+            
+            if not cat_results.empty:
+                st.info(f"Found {len(cat_results)} exact matches")
+                for _, row in cat_results.head(10).iterrows():
+                    render_recommendation_card(row, badge_text="Catalog")
+            else:
+                st.warning(f"No exact matches found for '{search_query}'")
+            
+            st.markdown("---")
+
+        # 2. SIMILARITY SEARCH
+        if show_similar:
+            st.subheader("💡 You Might Also Like")
             try:
-                similar = cb_model.get_similar_by_title(title_search, n=10)
-                if similar:
-                    st.success(f"Found {len(similar)} similar titles!")
-                    for i, item in enumerate(similar, 1):
-                        col1, col2 = st.columns([4, 1])
-                        with col1:
-                            st.markdown(f"**{i}. {item['title']}**")
-                            st.caption(f"{item['type']} | {item['genre'][:50]}...")
-                        with col2:
-                            st.metric("Match", f"{item['similarity_score']:.0%}")
-                        st.markdown("---")
-            except ValueError as e:
-                st.error(str(e))
-    
-    with tab2:
-        genres = st.multiselect("Select genres:", 
-            ["Action", "Comedy", "Drama", "Horror", "Sci-Fi", "Romance", 
-             "Documentary", "Thriller", "Animation", "Family", "Crime"])
-        
-        if genres and st.button("🔍 Find Content"):
-            recs = cb_model.get_genre_recommendations(genres, n=10)
+                # Use the query to get similar items (content-based)
+                # We reuse the logic from get_genre_recommendations but for arbitrary text
+                # Note: get_similar_by_title expects an exact title match to find the index.
+                # If search_query is NOT a title, we fallback to 'get_genre_recommendations' 
+                # effectively treating the search query like a keyword set.
+                
+                # Try finding exact title first to use item-item similarity
+                exact_match = shows_df[shows_df['title'].str.lower() == search_query.lower()]
+                
+                if not exact_match.empty:
+                    # Item-Item similarity
+                    sim_recs = pd.DataFrame(cb_model.get_similar_by_title(exact_match.iloc[0]['title'], n=15))
+                else:
+                    # Query-based similarity (treat input as keywords)
+                    # We can pass the search query directly to the genre method which constructs a query vector
+                    sim_recs = cb_model.get_genre_recommendations([search_query], n=15)
+                
+                # Apply genre filter
+                if selected_genres and not sim_recs.empty:
+                    sim_recs = sim_recs[sim_recs['genre'].apply(
+                        lambda x: any(g in str(x) for g in selected_genres)
+                    )]
+                
+                if not sim_recs.empty:
+                    for _, row in sim_recs.head(10).iterrows():
+                        render_recommendation_card(row, badge_text=f"{row.get('relevance_score', 0):.0%} Match")
+                else:
+                    st.info("No similar recommendations found.")
+            except Exception as e:
+                st.error(f"Could not generate similar recommendations: {str(e)}")
+
+    elif selected_genres and not search_query:
+        # Genre-only discovery mode
+        if show_similar or show_catalog: # Just show generally irrelevant of the toggle since it's just browsing
+            st.subheader(f"🎭 Browsing: {', '.join(selected_genres)}")
+            recs = cb_model.get_genre_recommendations(selected_genres, n=20)
             if not recs.empty:
-                st.dataframe(recs[['title', 'type', 'genre', 'relevance_score']], use_container_width=True)
+                for _, row in recs.head(20).iterrows():
+                    render_recommendation_card(row, badge_text="Genre Pick")
+
+
+def render_recommendation_card(row, badge_text="Recommended"):
+    """Helper to render a unified card style."""
+    st.markdown(f'''
+    <div class="recommendation-card">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div>
+                <p class="rec-title">{row['title']}</p>
+                <p class="rec-meta">{row['type']} • {row.get('release_year', 'N/A')} • {str(row.get('genre', row.get('listed_in', '')))}</p>
+                <p class="rec-meta" style="color: #aaa; font-size: 0.85rem; margin-top: 0.5rem;">
+                    {str(row.get('description', ''))[:140]}...
+                </p>
+            </div>
+            <span class="match-badge" style="white-space: nowrap; margin-left: 10px;">{badge_text}</span>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
 
 
 def show_evaluation_page(cf_model, shows_df, ratings_df, cf_metrics):
